@@ -1,0 +1,51 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.tv.neighbor'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.tv.neighbor"
+        // 投影仪是 Android 6 (API 23)；minSdk 21 兼容 5.x 老盒子
+        minSdk 21
+        targetSdk 28
+        versionCode 4
+        versionName "1.3"
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            // 直接用 debug 签名出 release 包，方便 sideload
+            signingConfig signingConfigs.debug
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    packagingOptions {
+        resources {
+            excludes += ['META-INF/DEPENDENCIES', 'META-INF/versions/9/OSGI-INF/MANIFEST.MF']
+        }
+    }
+
+    lint {
+        // targetSdk 28 是刻意的：给 Android 6 老设备 sideload，不上 Google Play
+        disable 'ExpiredTargetSdkVersion'
+    }
+}
+
+dependencies {
+    // SMB1/2/3 (含 3.1.1) 纯 Java 客户端，Android 6 可用
+    implementation 'eu.agno3.jcifs:jcifs-ng:2.1.10'
+    implementation 'org.slf4j:slf4j-nop:1.7.36'
+    // 内置播放器：ExoPlayer（Media3 1.4.1 = 最后支持 compileSdk 34 的稳定线）
+    implementation 'androidx.media3:media3-exoplayer:1.4.1'
+    implementation 'androidx.media3:media3-ui:1.4.1'
+    implementation 'androidx.media3:media3-datasource:1.4.1'
+}

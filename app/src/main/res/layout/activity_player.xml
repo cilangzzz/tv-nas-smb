@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@android:color/black">
+
+    <androidx.media3.ui.PlayerView
+        android:id="@+id/player_view"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <!-- 文件名，左上角 -->
+    <TextView
+        android:id="@+id/p_title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginLeft="24dp"
+        android:layout_marginTop="16dp"
+        android:layout_marginRight="24dp"
+        android:singleLine="true"
+        android:ellipsize="end"
+        android:shadowColor="#80000000"
+        android:shadowRadius="6"
+        android:textColor="@color/text_dim"
+        android:textSize="15sp" />
+
+    <!-- 操作提示 HUD（快进/快退/暂停），底部居中 -->
+    <TextView
+        android:id="@+id/p_hud"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|center_horizontal"
+        android:layout_marginBottom="44dp"
+        android:background="#66000000"
+        android:paddingLeft="26dp"
+        android:paddingRight="26dp"
+        android:paddingTop="10dp"
+        android:paddingBottom="10dp"
+        android:singleLine="true"
+        android:textColor="@color/text"
+        android:textSize="22sp"
+        android:visibility="gone" />
+
+    <!-- 解码失败提示，居中 -->
+    <TextView
+        android:id="@+id/p_err"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:gravity="center"
+        android:paddingLeft="40dp"
+        android:paddingRight="40dp"
+        android:lineSpacingExtra="6dp"
+        android:textColor="@color/warn"
+        android:textSize="20sp"
+        android:visibility="gone" />
+</FrameLayout>
