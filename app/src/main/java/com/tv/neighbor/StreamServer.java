@@ -8,7 +8,6 @@ import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketException;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicLong;
@@ -36,7 +35,10 @@ public final class StreamServer {
 
     private volatile ServerSocket server;
     private ExecutorService pool;
-    private final ConcurrentHashMap<String, Item> items = new ConcurrentHashMap<>();
+    // 注册表带上限（LinkedHashMap 保注册顺序）：悬停预览每次都会 register，
+    // 只进不出的 map 会长驻越积越多——超限按注册顺序淘汰最旧的 token。
+    private static final int MAX_ITEMS = 32;
+    private final java.util.LinkedHashMap<String, Item> items = new java.util.LinkedHashMap<>();
     private final AtomicLong seq = new AtomicLong();
     private volatile long lastUsed = System.currentTimeMillis();
 
@@ -98,10 +100,13 @@ public final class StreamServer {
         return System.currentTimeMillis() - lastUsed > thresholdMs;
     }
 
-    /** 注册条目，返回带 token 的完整 URL。 */
-    public String register(Cred cred, String url, String mime) {
+    /** 注册条目，返回带 token 的完整 URL。（超上限按注册顺序淘汰最旧的） */
+    public synchronized String register(Cred cred, String url, String mime) {
         String token = Long.toHexString(seq.incrementAndGet()) + Long.toHexString(System.nanoTime());
         items.put(token, new Item(cred, url, mime));
+        while (items.size() > MAX_ITEMS) {
+            items.remove(items.keySet().iterator().next());
+        }
         lastUsed = System.currentTimeMillis();
         return "http://127.0.0.1:" + port() + "/" + token + "/stream";
     }
@@ -136,7 +141,8 @@ public final class StreamServer {
             // path = /<token>/...
             String[] seg = path.split("/");
             String token = seg.length > 1 ? seg[1] : "";
-            Item it = items.get(token);
+            Item it;
+            synchronized (this) { it = items.get(token); } // LinkedHashMap 非并发安全
             if (it == null) {
                 writeSimple(out, "404 Not Found");
                 return;
@@ -213,6 +219,8 @@ public final class StreamServer {
             if (r < 0) break;
             dst.write(buf, 0, r);
             if (remain > 0) remain -= r;
+            lastUsed = System.currentTimeMillis(); // 长请求持续续命：系统播放器一次大 Range 要泵几十分钟，
+            // 空闲判定若只看"上次收到请求"，播到 5 分钟整会被 idleCheck 掐断
         }
     }
 
@@ -225,6 +233,8 @@ public final class StreamServer {
             if (r < 0) break;
             dst.write(buf, 0, r);
             if (remain > 0) remain -= r;
+            lastUsed = System.currentTimeMillis(); // 长请求持续续命：系统播放器一次大 Range 要泵几十分钟，
+            // 空闲判定若只看"上次收到请求"，播到 5 分钟整会被 idleCheck 掐断
         }
     }
 

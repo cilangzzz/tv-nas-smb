@@ -60,6 +60,7 @@ public class BrowseActivity extends Activity {
             new android.util.LruCache<>(24);
     private final android.util.LruCache<String, Long> durCache = new android.util.LruCache<>(64);
     private String sortMode = "name_asc"; // name_asc/name_desc/time_asc/time_desc（time=SMB 创建时间）
+    private int loadGen; // 目录加载代数：防 BACK 连按/重试时旧回调覆盖新目录
 
     public static Intent intent(Context c, String host, String dirUrl, String label) {
         Intent i = new Intent(c, BrowseActivity.class);
@@ -113,11 +114,18 @@ public class BrowseActivity extends Activity {
         load();
     }
 
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        thumbExec.shutdownNow(); // 别给每个浏览页实例漏一条常驻线程
+    }
+
     private void load() {
         loading.setVisibility(View.VISIBLE);
         Ui.setListEmpty(list, empty, false);
         pvGen++; // 目录重载：作废在途的悬停加载
         pvCard.setVisibility(View.GONE);
+        final int gen = ++loadGen; // 连按 BACK/重试时，旧回调不许覆盖新目录
         new Thread(() -> {
             List<Smb.Entry> got = null;
             boolean authErr = false;
@@ -132,6 +140,7 @@ public class BrowseActivity extends Activity {
             final boolean fAuth = authErr;
             final String fErr = err;
             runOnUiThread(() -> {
+                if (gen != loadGen) return; // 已有更新的加载在跑，这次结果作废
                 loading.setVisibility(View.INVISIBLE);
                 if (fGot != null) {
                     entries.clear();
@@ -146,6 +155,7 @@ public class BrowseActivity extends Activity {
                 } else {
                     entries.clear();
                     adapter.notifyDataSetChanged();
+                    rebuildStrip(); // 清掉上个目录的预览条，否则 ▸ 会踩到越界的 stripIdx
                     Ui.setListEmpty(list, empty, true);
                     empty.setText(getString(R.string.net_error, fErr == null ? "?" : fErr) + "\n\n⟳ 按 OK 重试");
                     empty.setOnClickListener(v -> load());
@@ -160,7 +170,10 @@ public class BrowseActivity extends Activity {
     private void onRowSelected(int pos) {
         listPos = pos;
         Smb.Entry e = pos >= 0 && pos < entries.size() ? entries.get(pos) : null;
-        if (!stripMode && previewable(e)) {
+        // 预览条接管期间只记位置：setSelection 会补发一次 onItemSelected，
+        // 若放行到 hoverPreview 会把预览卡的 meta（"· OK 粗览"）冲掉
+        if (stripMode) return;
+        if (previewable(e)) {
             int j = stripIdx.indexOf(pos);
             if (j >= 0) {
                 stripPos = j;
@@ -200,24 +213,25 @@ public class BrowseActivity extends Activity {
         getSharedPreferences("nn_ui", MODE_PRIVATE).edit().putString("sort_mode", mode).apply();
         Smb.Entry cur = listPos >= 0 && listPos < entries.size() ? entries.get(listPos) : null;
         boolean wasStrip = stripMode;
+        // 预览条态记住高亮的卡片（未必是列表焦点那行），排完跟回去
+        Smb.Entry stripCur = wasStrip && stripPos >= 0 && stripPos < stripIdx.size()
+                ? entries.get(stripIdx.get(stripPos)) : null;
         Smb.sort(entries, mode);
         adapter.notifyDataSetChanged();
         rebuildStrip();
-        int np = 0;
-        if (cur != null) {
-            for (int i = 0; i < entries.size(); i++) {
-                if (entries.get(i).url.equals(cur.url)) {
-                    np = i;
-                    break;
-                }
-            }
-        }
+        int np = indexOfUrl(cur == null ? null : cur.url);
         listPos = np;
         list.setSelection(np);
         onRowSelected(np); // setSelection 位置没变时 ListView 可能不回调，主动刷一次
-        if (wasStrip) {
-            int j = stripIdx.indexOf(np);
+        if (wasStrip && stripCur != null) {
+            int iu = indexOfUrl(stripCur.url);
+            int j = stripIdx.indexOf(iu);
             if (j >= 0) {
+                if (iu != np) { // 列表焦点对齐到高亮卡片所在行
+                    listPos = iu;
+                    list.setSelection(iu);
+                    onRowSelected(iu);
+                }
                 stripMode = true;
                 stripPos = j;
                 stripApply(true);
@@ -229,6 +243,16 @@ public class BrowseActivity extends Activity {
                 break;
             }
         }
+    }
+
+    /** entries 里按 URL 找下标；找不到回 0（第一行）。 */
+    private int indexOfUrl(String url) {
+        if (url != null) {
+            for (int i = 0; i < entries.size(); i++) {
+                if (entries.get(i).url.equals(url)) return i;
+            }
+        }
+        return 0;
     }
 
     private void askLogin() {
@@ -463,7 +487,7 @@ public class BrowseActivity extends Activity {
                     if (d > 0) atMs = Math.min(10_000, d / 2);
                 } catch (Exception ignored) {
                 }
-                fr = mmr.getFrameAtTime(atMs * 1000, android.media.MediaMetadataRetriever.OPTION_CLOSEST_SYNC);
+                fr = frameAt(mmr, atMs, 900); // 降采样抓帧，别把全分辨率帧塞进 pvCache
             } finally {
                 try {
                     mmr.release();
@@ -569,6 +593,12 @@ public class BrowseActivity extends Activity {
         card.addView(h.name, new android.widget.LinearLayout.LayoutParams(
                 android.view.ViewGroup.LayoutParams.MATCH_PARENT,
                 android.view.ViewGroup.LayoutParams.WRAP_CONTENT));
+        // 排序/重载整条重建时，已缓存的缩略图直接垫上，别等预取重抓
+        android.graphics.Bitmap pre = thumbCache.get(e.url);
+        if (pre != null) {
+            h.iv.setImageBitmap(pre);
+            h.ph.setVisibility(View.GONE);
+        }
         card.setTag(h);
         return card;
     }
@@ -1129,7 +1159,9 @@ public class BrowseActivity extends Activity {
             in.close();
         }
         int sample = 1;
-        while (o.outWidth / (sample * 2) >= targetW) sample *= 2;
+        // 以较长边为准：超宽全景图/竖长图也能压到位（原来只按宽算，竖图会漏采）
+        int maxDim = Math.max(o.outWidth, o.outHeight);
+        while (maxDim / (sample * 2) >= targetW) sample *= 2;
         o = new android.graphics.BitmapFactory.Options();
         o.inSampleSize = sample;
         in = f.openInputStream();
@@ -1305,13 +1337,15 @@ public class BrowseActivity extends Activity {
                 exitStrip();
                 return false; // 放行给 ListView 正常移焦点
             default:
-                return true; // 预览条态吃掉其余按键，防列表乱跳
+                // 列表导航键在上面已全部接住，其余（音量等）放行给系统
+                return super.dispatchKeyEvent(event);
         }
     }
 
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
         if (keyCode == KeyEvent.KEYCODE_BACK) {
+            if (event.getRepeatCount() > 0) return true; // 按住 BACK 的重复事件不连跳上级目录
             String parent = parentUrl(dirUrl);
             if (parent == null) {
                 finish();
