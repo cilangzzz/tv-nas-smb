@@ -28,13 +28,15 @@ public final class Smb {
         public final boolean dir;
         public final long size;
         public final long mtime;
+        public final long ctime;    // SMB 创建时间（服务器侧，供按时间排序）
 
-        Entry(String name, String url, boolean dir, long size, long mtime) {
+        Entry(String name, String url, boolean dir, long size, long mtime, long ctime) {
             this.name = name;
             this.url = url;
             this.dir = dir;
             this.size = size;
             this.mtime = mtime;
+            this.ctime = ctime;
         }
     }
 
@@ -135,8 +137,11 @@ public final class Smb {
             boolean dir = raw.endsWith("/");
             String name = dir ? raw.substring(0, raw.length() - 1) : raw;
             if (name.length() == 0) continue;
-            out.add(new Entry(name, parentUrl + enc(name) + (dir ? "/" : ""), dir, f.length(), f.lastModified()));
+            // listFiles() 返回的 SmbFile 属性已随目录枚举缓存在本地，createTime() 不再发网络请求
+            out.add(new Entry(name, parentUrl + enc(name) + (dir ? "/" : ""), dir,
+                    f.length(), f.lastModified(), f.createTime()));
         }
+        // 默认序：目录优先 + 中文名；用户切换排序后由 sort() 按 mode 重排
         final Collator col = Collator.getInstance(Locale.CHINA);
         Collections.sort(out, new Comparator<Entry>() {
             @Override
@@ -146,6 +151,25 @@ public final class Smb {
             }
         });
         return out;
+    }
+
+    /** 排序模式：name_asc / name_desc / time_asc / time_desc（time = SMB 创建时间）。 */
+    public static void sort(List<Entry> list, final String mode) {
+        if (list == null || list.size() < 2) return;
+        final Collator col = Collator.getInstance(Locale.CHINA);
+        final boolean byTime = mode != null && mode.startsWith("time");
+        final boolean desc = mode != null && mode.endsWith("desc");
+        Collections.sort(list, new Comparator<Entry>() {
+            @Override
+            public int compare(Entry a, Entry b) {
+                if (a.dir != b.dir) return a.dir ? -1 : 1; // 目录恒在最前，不随降序翻转
+                int r = byTime
+                        ? (a.ctime < b.ctime ? -1 : a.ctime > b.ctime ? 1 : 0)
+                        : col.compare(a.name, b.name);
+                if (r == 0) r = col.compare(a.name, b.name); // 同刻按名字，保证稳定
+                return desc ? -r : r;
+            }
+        });
     }
 
     /** 是否认证错误（用于触发登录框）。 */

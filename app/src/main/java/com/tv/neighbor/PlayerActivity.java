@@ -53,6 +53,7 @@ public class PlayerActivity extends Activity {
     private Cred cred;
     private boolean errored;
     private boolean launchAsAudio;
+    private long startMs; // 粗览片段「从此处播放」的起播位置
     // 同目录切换列表（BrowseActivity 传入）：按 ↑/菜单键弹出
     private String[] listUrls = new String[0];
     private String[] listNames = new String[0];
@@ -77,7 +78,7 @@ public class PlayerActivity extends Activity {
 
     public static Intent intent(android.content.Context c, String httpUrl, String smbUrl,
                                 String mime, String title, Cred cred,
-                                String[] urls, String[] names, int idx) {
+                                String[] urls, String[] names, int idx, long startMs) {
         Intent i = new Intent(c, PlayerActivity.class);
         i.putExtra("url", httpUrl);
         i.putExtra("smb", smbUrl);
@@ -87,6 +88,7 @@ public class PlayerActivity extends Activity {
         i.putExtra("urls", urls);
         i.putExtra("names", names);
         i.putExtra("idx", idx);
+        i.putExtra("startMs", startMs);
         return i;
     }
 
@@ -105,6 +107,7 @@ public class PlayerActivity extends Activity {
         listUrls = getIntent().getStringArrayExtra("urls");
         listNames = getIntent().getStringArrayExtra("names");
         curIdx = getIntent().getIntExtra("idx", -1);
+        startMs = getIntent().getLongExtra("startMs", 0);
         if (listUrls == null) listUrls = new String[0];
         if (listNames == null) listNames = new String[0];
         launchAsAudio = mime != null && mime.startsWith("audio/");
@@ -170,6 +173,7 @@ public class PlayerActivity extends Activity {
         view.setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING);
         player.setMediaItem(MediaItem.fromUri(url));
         player.prepare();
+        if (startMs > 0) player.seekTo(startMs); // 从粗览片段的时间点起播
         player.play();
         if (launchAsAudio) showHud("🎵 " + name, true);
     }
@@ -374,6 +378,7 @@ public class PlayerActivity extends Activity {
         listUrls = intent.getStringArrayExtra("urls");
         listNames = intent.getStringArrayExtra("names");
         curIdx = intent.getIntExtra("idx", -1);
+        startMs = intent.getLongExtra("startMs", 0); // 别沿用上一次粗览遗留的起播位置
         if (listUrls == null) listUrls = new String[0];
         if (listNames == null) listNames = new String[0];
         launchAsAudio = mime != null && mime.startsWith("audio/");

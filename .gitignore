@@ -6,3 +6,4 @@ local.properties
 *.iml
 # 大体积测试视频（可用 ffmpeg 再生成）
 tools/*.mp4
+*.apk

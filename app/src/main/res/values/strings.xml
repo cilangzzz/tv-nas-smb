@@ -42,5 +42,6 @@
     <string name="scan_fail">扫描失败：%1$s</string>
     <string name="play_builtin">播放（内置播放器）</string>
     <string name="preview">预览</string>
+    <string name="pv_strip_hint">◂ ▸ 浏览预览 · OK 粗览 · BACK 返回</string>
     <string name="player_error">内置播放器无法解码该文件\n%1$s\n\n按 OK 键改用系统播放器重试\n按 BACK 键返回列表</string>
 </resources>

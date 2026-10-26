@@ -100,6 +100,32 @@
                 android:layout_height="0dp"
                 android:layout_marginTop="12dp"
                 android:layout_weight="1" />
+
+            <!-- 预览条：目录内可预览文件的横向轮播，焦点附近预取缩略图 -->
+            <HorizontalScrollView
+                android:id="@+id/pv_strip_scroll"
+                android:layout_width="match_parent"
+                android:layout_height="122dp"
+                android:layout_marginTop="12dp"
+                android:fillViewport="true"
+                android:scrollbars="none">
+
+                <LinearLayout
+                    android:id="@+id/pv_strip"
+                    android:layout_width="wrap_content"
+                    android:layout_height="match_parent"
+                    android:orientation="horizontal" />
+            </HorizontalScrollView>
+
+            <TextView
+                android:id="@+id/pv_hint"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:singleLine="true"
+                android:text="@string/pv_strip_hint"
+                android:textColor="@color/text_dim"
+                android:textSize="11sp" />
         </LinearLayout>
     </LinearLayout>
 

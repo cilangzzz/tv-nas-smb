@@ -3,6 +3,18 @@
 为 Android 6 投影仪/电视设计的局域网 SMB（Windows 共享 / NAS）浏览与播放应用。
 遥控器（D-pad）优先的 10-foot UI，不依赖厂商那个只走 SMB1 的"网络邻居"。
 
+| 主页（445 扫描 + 收藏） | 共享列表 | 文件浏览 + 预览卡 |
+|---|---|---|
+| ![主页](screenshots/01-devices.png) | ![共享列表](screenshots/02-shares.png) | ![文件浏览](screenshots/03-browse-strip.png) |
+
+| 预览条聚焦（◂▸ 进入） | 视频粗览（随机 5 片段） | 内置播放器 |
+|---|---|---|
+| ![预览条](screenshots/04-strip-focus.png) | ![粗览](screenshots/05-rough-preview.png) | ![播放器](screenshots/06-player.png) |
+
+| 菜单键 · 排序方式 |
+|---|
+| ![排序](screenshots/07-sort-menu.png) |
+
 ## 解决什么问题
 
 老电视/投影仪自带的"网络邻居"基本只支持 **SMB1 + NetBIOS 浏览列表**，
@@ -21,6 +33,17 @@
   **127.0.0.1 回环 HTTP 流服务器**（HTTP Range → 可拖进度条），前台服务保活。
 - 预览：文件行焦点悬停自动预览（防抖+帧缓存）；菜单「预览」支持图片看图、
   音视频抓帧+时长（MediaMetadataRetriever 走回环流）、字幕/文本看内容。
+- **预览条（2026-10-26 新增）**：右侧预览卡底部横向轮播目录内全部可预览文件，
+  焦点附近 ±2 项由单线程队列预取低清缩略图（图片降采样 / 视频回环流抓帧），
+  高亮跟随列表焦点；列表态按 ◂/▸ 进入预览条（◂▸ 翻卡片、OK 粗览、BACK/↑/↓ 回列表）。
+- **排序（2026-10-26 新增）**：菜单键弹出排序方式——名称 A→Z / Z→A、
+  创建时间 旧→新 / 新→旧（SMB ctime），目录恒在最前，选择记忆在本地
+  （SharedPreferences `nn_ui`）；重排后焦点保持在原条目，预览条态下排序不退出预览条；
+  时间排序时预览卡日期跟随显示创建时间。
+- **视频粗览（2026-10-26 新增）**：菜单「预览」或预览条 OK 对视频不再只抓单帧——
+  随机抽 5 个时间点（分层随机，每次打开位置都不同）低分辨率抓帧成胶片轨道，
+  ◂▸ 翻片段、右下角角标显示时间点，OK 从该时间点起播（PlayerActivity 收 startMs）；
+  一次 MMR 会话顺序抽取、逐帧上屏，抓不到画面（纯音频/封装异常）有提示。
 - 下载：复制到 `Download/网络邻居/`（Android 6 运行时权限）。
 - 收藏/凭据：按主机保存（SharedPreferences，密码仅 Base64 混淆——家庭内网场景够用，别当安全存储）。
 
@@ -34,7 +57,8 @@
      ↓ OK
 共享列表（smb://host/ 的共享，已过滤 IPC$）
      ↓ OK
-文件浏览（目录优先+中文排序；焦点悬停自动预览；文件 OK → 预览/播放/复制到本地）
+文件浏览（目录优先+中文排序；菜单键=排序方式；焦点悬停自动预览；右侧预览卡带可预览文件缩略图轮播条）
+     ◂/▸ 进入轮播条翻卡片 · OK 粗览（视频=5 随机片段胶片，OK 从该片段起播）
      BACK 逐级向上，共享根 BACK 回共享列表
      ↓ 文件 OK → 播放（内置播放器）
 播放页（ExoPlayer 全屏）
@@ -122,7 +146,7 @@ app/src/main/java/com/tv/neighbor/
   App.java              Application（进程级 Context，供播放器磁盘缓存等使用）
   MainActivity.java     主页（扫描/收藏/操作）
   ShareListActivity.java 共享列表（含认证失败 → 登录框重试）
-  BrowseActivity.java   目录浏览/文件菜单/悬停预览/图片视频字幕预览/下载
+  BrowseActivity.java   目录浏览/文件菜单/悬停预览/预览条轮播/视频粗览/图片视频字幕预览/下载
   PlayerActivity.java   内置播放器（ExoPlayer：长按快进/预读/磁盘缓存/同目录切换/降级）
   HostStore.java        收藏与凭据持久化
   SmbScanner.java       /24 段 445 并发扫描
